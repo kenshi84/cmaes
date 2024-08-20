@@ -226,26 +226,43 @@ class DXNESIC:
         assert bounds is None or _is_valid_bounds(bounds, self._mean), "invalid bounds"
         self._bounds = bounds
 
-    def ask(self) -> np.ndarray:
+    def ask(self, parallel: bool = False) -> np.ndarray:
         """Sample a parameter"""
         for i in range(self._n_max_resampling):
-            x = self._sample_solution()
+            if parallel:
+                x = np.concatenate([
+                    self._sample_solution(True),
+                    self._sample_solution(True)
+                ])[:self._popsize,:]
+            else:
+                x = self._sample_solution(False)
             if self._is_feasible(x):
                 return x
-        x = self._sample_solution()
+        x = self._sample_solution(parallel)
         x = self._repair_infeasible_params(x)
         return x
 
-    def _sample_solution(self) -> np.ndarray:
+    def _sample_solution(self, parallel: bool) -> np.ndarray:
         # antithetic sampling
-        if self._zsym is None:
-            z = self._rng.randn(self._n_dim)  # ~ N(0, I)
-            self._zsym = z
+        if parallel:
+            half_popsize = math.ceil(self._popsize / 2)
+            if self._zsym is None:
+                z = self._rng.randn(self._n_dim, half_popsize)
+                self._zsym = z
+            else:
+                z = -self._zsym
+                self._zsym = None
+            x = self._mean[:,None] + self._sigma * self._B @ z
+            return x.T
         else:
-            z = -self._zsym
-            self._zsym = None
-        x = self._mean + self._sigma * self._B.dot(z)  # ~ N(m, σ^2 B B^T)
-        return x
+            if self._zsym is None:
+                z = self._rng.randn(self._n_dim)  # ~ N(0, I)
+                self._zsym = z
+            else:
+                z = -self._zsym
+                self._zsym = None
+            x = self._mean + self._sigma * self._B.dot(z)  # ~ N(m, σ^2 B B^T)
+            return x
 
     def _is_feasible(self, param: np.ndarray) -> bool:
         if self._bounds is None:

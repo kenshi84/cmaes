@@ -151,20 +151,25 @@ class XNES:
         assert bounds is None or _is_valid_bounds(bounds, self._mean), "invalid bounds"
         self._bounds = bounds
 
-    def ask(self) -> np.ndarray:
+    def ask(self, parallel: bool = False) -> np.ndarray:
         """Sample a parameter"""
         for i in range(self._n_max_resampling):
-            x = self._sample_solution()
+            x = self._sample_solution(parallel)
             if self._is_feasible(x):
                 return x
-        x = self._sample_solution()
+        x = self._sample_solution(parallel)
         x = self._repair_infeasible_params(x)
         return x
 
-    def _sample_solution(self) -> np.ndarray:
-        z = self._rng.randn(self._n_dim)  # ~ N(0, I)
-        x = self._mean + self._sigma * self._B.dot(z)  # ~ N(m, σ^2 B B^T)
-        return x
+    def _sample_solution(self, parallel: bool) -> np.ndarray:
+        if parallel:
+            z = self._rng.randn(self._n_dim, self._popsize)  # ~ N(0, I)
+            x = self._mean[:,None] + self._sigma * self._B @ z  # ~ N(m, σ^2 B B^T)
+            return x.T
+        else:
+            z = self._rng.randn(self._n_dim)  # ~ N(0, I)
+            x = self._mean + self._sigma * self._B.dot(z)  # ~ N(m, σ^2 B B^T)
+            return x
 
     def _is_feasible(self, param: np.ndarray) -> bool:
         if self._bounds is None:

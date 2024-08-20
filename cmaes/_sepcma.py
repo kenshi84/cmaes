@@ -204,13 +204,13 @@ class SepCMA:
         assert bounds is None or _is_valid_bounds(bounds, self._mean), "invalid bounds"
         self._bounds = bounds
 
-    def ask(self) -> np.ndarray:
+    def ask(self, parallel: bool = False) -> np.ndarray:
         """Sample a parameter"""
         for i in range(self._n_max_resampling):
-            x = self._sample_solution()
+            x = self._sample_solution(parallel)
             if self._is_feasible(x):
                 return x
-        x = self._sample_solution()
+        x = self._sample_solution(parallel)
         x = self._repair_infeasible_params(x)
         return x
 
@@ -220,12 +220,18 @@ class SepCMA:
         self._D = np.sqrt(np.where(self._C < 0, _EPS, self._C))
         return self._D
 
-    def _sample_solution(self) -> np.ndarray:
+    def _sample_solution(self, parallel: bool) -> np.ndarray:
         D = self._eigen_decomposition()
-        z = self._rng.randn(self._n_dim)  # ~ N(0, I)
-        y = D * z  # ~ N(0, C)
-        x = self._mean + self._sigma * y  # ~ N(m, σ^2 C)
-        return x
+        if parallel:
+            z = self._rng.randn(self._n_dim, self._popsize)  # ~ N(0, I)
+            y = D[:,None] * z  # ~ N(0, C)
+            x = self._mean[:,None] + self._sigma * y  # ~ N(m, σ^2 C)
+            return x.T
+        else:
+            z = self._rng.randn(self._n_dim)  # ~ N(0, I)
+            y = D * z  # ~ N(0, C)
+            x = self._mean + self._sigma * y  # ~ N(m, σ^2 C)
+            return x
 
     def _is_feasible(self, param: np.ndarray) -> bool:
         if self._bounds is None:
