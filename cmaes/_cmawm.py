@@ -80,7 +80,10 @@ class CMAwM:
         n_max_resampling:
             A maximum number of resampling parameters (default: 100).
             If all sampled parameters are infeasible, the last sampled one
-            will be clipped with lower and upper bounds.
+            will be clipped with lower and upper bounds if force_bounds==True.
+
+        force_bounds:
+            If bounds are not satisfied after resampling, clip the parameter
 
         seed:
             A seed number (optional).
@@ -104,6 +107,7 @@ class CMAwM:
         bounds: np.ndarray,
         steps: np.ndarray,
         n_max_resampling: int = 100,
+        force_bounds: bool = True,
         seed: Optional[int] = None,
         population_size: Optional[int] = None,
         cov: Optional[np.ndarray] = None,
@@ -111,11 +115,12 @@ class CMAwM:
     ):
         # initialize `CMA`
         self._cma = CMA(
-            mean, sigma, bounds, n_max_resampling, seed, population_size, cov
+            mean, sigma, bounds, n_max_resampling, force_bounds, seed, population_size, cov
         )
         n_dim = self._cma.dim
         population_size = self._cma.population_size
         self._n_max_resampling = n_max_resampling
+        self._force_bounds = force_bounds
 
         # split discrete space and continuous space
         assert len(bounds) == len(steps), "bounds and steps must be the same length"
@@ -133,7 +138,7 @@ class CMAwM:
         # continuous_space contains low and high of each parameter.
         self._continuous_idx = np.where(steps <= 0)[0]
         self._continuous_space = bounds[self._continuous_idx]
-        assert _is_valid_bounds(
+        assert (not force_bounds) or _is_valid_bounds(
             self._continuous_space, mean[self._continuous_idx]
         ), "invalid bounds"
 
@@ -209,9 +214,10 @@ class CMAwM:
                     )
                 return x_encoded, x
         x = self._cma._sample_solution()
-        x[self._continuous_idx] = self._repair_continuous_params(
-            x[self._continuous_idx]
-        )
+        if self._force_bounds:
+            x[self._continuous_idx] = self._repair_continuous_params(
+                x[self._continuous_idx]
+            )
         x_encoded = x.copy()
         if self._n_zdim > 0:
             x_encoded[self._discrete_idx] = self._encode_discrete_params(

@@ -54,7 +54,10 @@ class CMA:
         n_max_resampling:
             A maximum number of resampling parameters (default: 100).
             If all sampled parameters are infeasible, the last sampled one
-            will be clipped with lower and upper bounds.
+            will be clipped with lower and upper bounds if force_bounds==True.
+
+        force_bounds:
+            If bounds are not satisfied after resampling, clip the parameter
 
         seed:
             A seed number (optional).
@@ -75,6 +78,7 @@ class CMA:
         sigma: float,
         bounds: Optional[np.ndarray] = None,
         n_max_resampling: int = 100,
+        force_bounds: bool = True,
         seed: Optional[int] = None,
         population_size: Optional[int] = None,
         cov: Optional[np.ndarray] = None,
@@ -183,9 +187,10 @@ class CMA:
         self._B: Optional[np.ndarray] = None
 
         # bounds contains low and high of each parameter.
-        assert bounds is None or _is_valid_bounds(bounds, mean), "invalid bounds"
+        assert bounds is None or (not force_bounds) or _is_valid_bounds(bounds, mean), "invalid bounds"
         self._bounds = bounds
         self._n_max_resampling = n_max_resampling
+        self._force_bounds = force_bounds
 
         self._g = 0
         self._rng = np.random.RandomState(seed)
@@ -258,7 +263,7 @@ class CMA:
 
     def set_bounds(self, bounds: Optional[np.ndarray]) -> None:
         """Update boundary constraints"""
-        assert bounds is None or _is_valid_bounds(bounds, self._mean), "invalid bounds"
+        assert bounds is None or (not self._force_bounds) or _is_valid_bounds(bounds, self._mean), "invalid bounds"
         self._bounds = bounds
 
     def ask(self, parallel: bool = False) -> np.ndarray:
@@ -268,7 +273,8 @@ class CMA:
             if self._is_feasible(x):
                 return x
         x = self._sample_solution(parallel)
-        x = self._repair_infeasible_params(x)
+        if self._force_bounds:
+            x = self._repair_infeasible_params(x)
         return x
 
     def _eigen_decomposition(self) -> tuple[np.ndarray, np.ndarray]:
